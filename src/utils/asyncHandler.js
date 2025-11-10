@@ -1,13 +1,12 @@
 // requestHandler OR FUNCTION - ANY NAME
 const asyncHandler = (requestHandler) => {
-  (req, res, next) => {
-    Promise.resolve(requestHandler(req, res, next)).catch((error) =>
-      next(error)
-    );
+  return (req, res, next) => {
+  Promise.resolve(requestHandler(req, res, next)).catch((error) =>
+      next(error))
   };
 };
 
-export { asyncHandler}
+export {asyncHandler}
 
 // const asyncHandler = ()=>{}
 // const asyncHandler = (func) => () =>{}
