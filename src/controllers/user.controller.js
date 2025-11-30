@@ -6,12 +6,10 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 
 // Temporary test - bypass asyncHandler
 const registerUser = asyncHandler(async (req, res) => {
-  res.status(200).json({
-    message: "ok",
-  });
+  console.log('req.files:', req.files);
+  console.log('req.body:', req.body);
 
   const { username, fullname, email, password } = req.body;
-  console.log("Email: ", email);
 
   if (
     [fullname, email, password, username].some((field) => field?.trim() === "")
@@ -23,7 +21,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid email address");
   }
 
-  const existingUser = User.findOne({
+  const existingUser = await User.findOne({
     $or: [{ email }, { username }],
   });
 
@@ -33,7 +31,13 @@ const registerUser = asyncHandler(async (req, res) => {
 
   //we'll get the path which is taken by the multer middleware
   const avatarLocalPath = req.files?.avatar[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage[0]?.path;
+  //const coverImageLocalPath = req.files?.coverImage[0]?.path;
+
+  //debugging for cover image path
+  let coverImageLocalPath;
+  if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length>0){
+    coverImageLocalPath = req.files.coverImage[0].path;
+  }
 
   if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar is required");
@@ -42,7 +46,9 @@ const registerUser = asyncHandler(async (req, res) => {
   //upload on cloudinary and it will take some time
   const Avatar = await uploadOnCloudinary(avatarLocalPath);
 
-  const CoverImage = await uploadOnCloudinary(coverImageLocalPath);
+  const CoverImage = coverImageLocalPath
+    ? await uploadOnCloudinary(coverImageLocalPath)
+    : null;
 
   if (!Avatar) {
     throw new ApiError(500, "Avatar file is required");
@@ -53,9 +59,9 @@ const registerUser = asyncHandler(async (req, res) => {
   //sometimes mongoose operations take time so add await
   const user = await User.create({
     fullname,
-    Avatar: Avatar.url,
+    avatar: Avatar.url,
     //not compulsory
-    CoverImage: CoverImage?.url || "",
+    coverImage: CoverImage?.url || "",
     email,
     password,
     username: username.toLowerCase(),
@@ -74,7 +80,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
   return res
     .status(201)
-    .json(new ApiResponse(200, createdUser, "User registered successfully"));
+    .json(new ApiResponse(201, createdUser, "User registered successfully"));
 });
 
 export { registerUser };
