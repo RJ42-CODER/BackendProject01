@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 //asynchandler not required here since we are using it internally and not through web requests.
 const generateAccessTokenAndRefreshToken = async (userId) => {
@@ -107,7 +108,7 @@ const registerUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   // Login logic will go here
   const { username, email, password } = req.body;
-  if (!username || !email) {
+  if (!(username || email)) {
     throw new ApiError(400, "Username or Email is required to login");
   }
 
@@ -149,7 +150,7 @@ const loginUser = asyncHandler(async (req, res) => {
       //succesfull login
       .status(200)
       .cookie("accessToken", accessToken, options)
-      .coookie("refreshToken", refreshToken, options)
+      .cookie("refreshToken", refreshToken, options)
       .json(
         new ApiResponse(
           200,
@@ -192,12 +193,69 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   //clear cookies
   return res
-  .status(200)
-  .clearCookie("accessToken", options)
-  .clearCookie("refreshToken", options)
-  .json(new ApiResponse(200,null,"User Logged Out Successfully"));
-
-
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, null, "User Logged Out Successfully"));
 });
 
-export { registerUser, loginUser, logoutUser };
+const refreshAccessToken = asyncHandler(async(res,req)=>{
+  // Refresh token logic will go here
+
+  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
+
+  if(!incomingRefreshToken){
+    throw new ApiError(401,"Unauthorized request");
+  }
+
+  //verify refresh token
+  //user has encrypted refresh token
+  //we need raw token to compare with database
+
+  try {
+    //maybe some errors will come while verifying, so for safety use try catch
+    const decodedToken= jwt.verify(
+      incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET
+    )
+  
+    const user = await User.findById(decodedToken?._id)
+  
+    if(!user){
+      throw new ApiError(401,"Invalid refresh token - user not found");
+    }
+  
+    //USER NE BHEJA EK TOKEN compare with the token of user whose _id we got from the decoded token
+  
+    if(incomingRefreshToken !== user?.refreshToken){
+      throw new ApiError(401,"Refresh Token is invalid or used");
+    }
+  
+    //user is valid and token matches
+    //generate new access token
+  
+    const options ={
+      httpOnly: true,
+      secure: true,
+    }
+  
+    const {accessToken,NewrefreshToken} = await generateAccessTokenAndRefreshToken(user._id)
+  
+    return res.status(200)
+    .cookie("accessToken",accessToken,options)
+    .cookie("refreshToken",NewrefreshToken,options)
+    .json(
+      new ApiResponse(
+        200,
+        {accessToken,NewrefreshToken},
+        "Access token refreshed successfully"
+      )
+    )
+  } catch (error) {
+    throw new ApiError(401,error?.message || "Invalid refresh token");
+  }
+
+
+
+})
+
+export { registerUser, loginUser, logoutUser , refreshAccessToken};
