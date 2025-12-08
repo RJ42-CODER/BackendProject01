@@ -6,7 +6,6 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary";
 
-
 //asynchandler not required here since we are using it internally and not through web requests.
 const generateAccessTokenAndRefreshToken = async (userId) => {
   try {
@@ -115,8 +114,8 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   if (!password) {
-  throw new ApiError(400, "Password is required to login");
-}
+    throw new ApiError(400, "Password is required to login");
+  }
 
   const user = await User.findOne({
     $or: [{ username }, { email }],
@@ -246,7 +245,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       secure: true,
     };
 
-    const { accessToken,refreshToken: newRefreshToken } =
+    const { accessToken, refreshToken: newRefreshToken } =
       await generateAccessTokenAndRefreshToken(user._id);
 
     return res
@@ -415,77 +414,133 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 });
 
 const getUserChannel = asyncHandler(async (req, res) => {
+  const { username } = req.params;
 
-  const {username} = req.params
-
-  if(!username?.trim()){
-    throw new ApiError(400,"Username is required")
+  if (!username?.trim()) {
+    throw new ApiError(400, "Username is required");
   }
 
   const channel = await User.aggregate([
     {
       $match: {
-        username : username?.toLowerCase()
-      }
+        username: username?.toLowerCase(),
+      },
     },
     {
-      $lookup:{
+      $lookup: {
         //model lowercase and plural form
-        from:"subscriptions",
-        localField:"_id",
-        foreignField:"channel",
-        as:"subscribers"
-      }
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
     },
     {
-      $lookup:{
-        from:"subscriptions",
-        localField:"_id",
-        foreignField:"subscriber",
-        as:"subscribedTo"
-      }
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
     },
     {
-      $addFields:{
+      $addFields: {
         subscribersCount: {
-          $size:"$subscribers"
+          $size: "$subscribers",
         },
-        channelsSubscribedToCount:{
-          $size:{$subscribedTo}
+        channelsSubscribedToCount: {
+          $size: { $subscribedTo },
         },
-        isSubscribed:{
-          $cond:{
-            if: {$in:[req.user?._id,"$subscribers.subscriber"]},
-            then :true,
-            else:false
-          }
-        }
-      }
+        isSubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
     },
     {
-      $project:{
-        fullname:1,
-        username:1,
-        subscribersCount:1,
-        channelsSubscribedToCount:1,
-        isSubscribed:1,
-        avatar:1,
-        coverImage:1,
-        email:1
-      }
-    }
-  ])
+      $project: {
+        fullname: 1,
+        username: 1,
+        subscribersCount: 1,
+        channelsSubscribedToCount: 1,
+        isSubscribed: 1,
+        avatar: 1,
+        coverImage: 1,
+        email: 1,
+      },
+    },
+  ]);
   //console log this for debugging
 
-  if(!channel?.length){
+  if (!channel?.length) {
     // if channel?.length is 0 or undefined -> !0 = true -> error
-    throw new ApiError(404,"Channel not found");
+    throw new ApiError(404, "Channel not found");
   }
+
+  return (
+    res
+      .status(200)
+      //returning first element/object of the channel array
+      .json(
+        new ApiResponse(200, channel[0], "User channel fetched successfully")
+      )
+  );
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  // to get the converted value of string for ObjectId
+
+  const user = User.aggregate([
+    {
+      $match: {
+        // _id : req.user?._id  string to ObjectId conversion
+        _id: new mongoose.Types.ObjectId(req.user?._id),
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        //subpipeline to lookup owner details
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    fullname: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          { //to get the first object of owner array
+            $addFields:{
+              owner:{
+                $first:"$owner"
+              }
+            }
+          },
+        ],
+      },
+    },
+  ]);
 
   return res
   .status(200)
-  //returning first element/object of the channel array
-  .json(new ApiResponse(200, channel[0], "User channel fetched successfully"));
+  //just give the watch history array
+  .json(new ApiResponse(200,user[0].watchHistory, "Watch history fetched successfully"));
 
 });
 
@@ -500,4 +555,5 @@ export {
   updateAvatar,
   updateCoverImage,
   getUserChannel,
+  getWatchHistory,
 };
