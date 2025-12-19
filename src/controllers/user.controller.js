@@ -5,6 +5,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import { v2 as cloudinary } from "cloudinary";
+import mongoose from "mongoose";
 
 //asynchandler not required here since we are using it internally and not through web requests.
 const generateAccessTokenAndRefreshToken = async (userId) => {
@@ -147,7 +148,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const options = {
     //only modified by server and not by frontend
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
   };
 
   return (
@@ -180,8 +181,8 @@ const logoutUser = asyncHandler(async (req, res) => {
     req.user._id,
     {
       //what to update
-      $set: {
-        refreshToken: undefined,
+      $unset: {
+        refreshToken: 1,
       },
     },
     {
@@ -193,7 +194,7 @@ const logoutUser = asyncHandler(async (req, res) => {
   const options = {
     //only modified by server and not by frontend
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production"
   };
 
   //clear cookies
@@ -242,7 +243,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     const options = {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production"
     };
 
     const { accessToken, refreshToken: newRefreshToken } =
@@ -342,7 +343,7 @@ const updateAvatar = asyncHandler(async (req, res) => {
   }
 
   //extract the old id and delete its avatar from cloudinary
-  // cloudinaryUrl is req.user?.avatar;
+  //cloudinaryUrl is req.user?.avatar;
   //example: https://res.cloudinary.com/<cloud_name>/image/upload/v1723456789/folder/myimage_abcd1234.jpg
 
   const oldAvatarUrl = req.user?.avatar;
@@ -449,7 +450,7 @@ const getUserChannel = asyncHandler(async (req, res) => {
           $size: "$subscribers",
         },
         channelsSubscribedToCount: {
-          $size: { $subscribedTo },
+          $size: "$subscribedTo",
         },
         isSubscribed: {
           $cond: {
@@ -493,7 +494,7 @@ const getUserChannel = asyncHandler(async (req, res) => {
 const getWatchHistory = asyncHandler(async (req, res) => {
   // to get the converted value of string for ObjectId
 
-  const user = User.aggregate([
+  const user = await User.aggregate([
     {
       $match: {
         // _id : req.user?._id  string to ObjectId conversion
@@ -525,23 +526,31 @@ const getWatchHistory = asyncHandler(async (req, res) => {
               ],
             },
           },
-          { //to get the first object of owner array
-            $addFields:{
-              owner:{
-                $first:"$owner"
-              }
-            }
+          {
+            //to get the first object of owner array
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
           },
         ],
       },
     },
   ]);
 
-  return res
-  .status(200)
-  //just give the watch history array
-  .json(new ApiResponse(200,user[0].watchHistory, "Watch history fetched successfully"));
-
+  return (
+    res
+      .status(200)
+      //just give the watch history array
+      .json(
+        new ApiResponse(
+          200,
+          user[0].watchHistory,
+          "Watch history fetched successfully"
+        )
+      )
+  );
 });
 
 export {
