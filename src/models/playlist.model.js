@@ -14,6 +14,7 @@ const playlistSchema = new mongoose.Schema(
       {
         type: Schema.Types.ObjectId,
         ref: "Video",
+        default: [],
       },
     ],
     owner: {
