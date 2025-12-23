@@ -194,7 +194,7 @@ const logoutUser = asyncHandler(async (req, res) => {
   const options = {
     //only modified by server and not by frontend
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production"
+    secure: process.env.NODE_ENV === "production",
   };
 
   //clear cookies
@@ -243,7 +243,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     const options = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production"
+      secure: process.env.NODE_ENV === "production",
     };
 
     const { accessToken, refreshToken: newRefreshToken } =
@@ -298,18 +298,28 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullname, username } = req.body;
 
-  if (!fullname?.trim() || !username?.trim()) {
-    throw new ApiError(400, "Fullname and Username are required");
+  if (!fullname?.trim() && !username?.trim()) {
+    throw new ApiError(
+      400,
+      "Atleast one field is required(fullname or username)"
+    );
+  }
+
+  const updateFields = {};
+
+  if (fullname?.trim()) {
+    updateFields.fullname = fullname.trim();
+  }
+
+  if (username?.trim()) {
+    updateFields.username = username.trim();
   }
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     //mongodb operators used here
     {
-      $set: {
-        fullname,
-        username: username.toLowerCase(),
-      },
+      $set: updateFields,
     },
     //updated informartion is returned
     { new: true }

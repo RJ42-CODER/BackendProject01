@@ -210,7 +210,7 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Enter detais to be updated");
   }
 
-   const video = await Video.findOne({
+  const video = await Video.findOne({
     _id: videoId,
     owner: req.user._id,
   });
@@ -224,18 +224,18 @@ const updateVideo = asyncHandler(async (req, res) => {
   if (req.file) {
     uploadedThumbnail = await uploadOnCloudinary(req.file.path);
 
-  if (!uploadedThumbnail?.url) {
-    throw new ApiError(500, "Thumbnail upload failed");
-  }
+    if (!uploadedThumbnail?.url) {
+      throw new ApiError(500, "Thumbnail upload failed");
+    }
 
-//delete old thumbnail from cloudinary
-  if (video.thumbnail) {
-    const oldPublicId = video.thumbnail.split("/").pop().split(".")[0];
-    await cloudinary.uploader.destroy(oldPublicId);
-  }
+    //delete old thumbnail from cloudinary
+    if (video.thumbnail) {
+      const oldPublicId = video.thumbnail.split("/").pop().split(".")[0];
+      await cloudinary.uploader.destroy(oldPublicId);
+    }
 
-  video.thumbnail= uploadedThumbnail.url;
-}
+    video.thumbnail = uploadedThumbnail.url;
+  }
 
   if (title) video.title = title.trim();
   if (description) video.description = description.trim();
@@ -248,33 +248,42 @@ const updateVideo = asyncHandler(async (req, res) => {
 });
 
 const getVideoById = asyncHandler(async (req, res) => {
-    const { videoId } = req.params
-    //TODO: get video by id
+  const { videoId } = req.params;
+  //TODO: get video by id
 
-    if(!isValidObjectId(videoId)){
-      throw new ApiError(400,"Invalid VideoId")
-    }
+  if (!isValidObjectId(videoId)) {
+    throw new ApiError(400, "Invalid VideoId");
+  }
 
-    //If video is not published:allow only owner to see it - DRAFTS
-    //If video is published:allow anyone
+  //If video is not published:allow only owner to see it - DRAFTS
+  //If video is published:allow anyone
 
-    const video = await Video.findOne({_id:videoId});
+  const video = await Video.findOne({ _id: videoId });
 
-    if(!video){
-      throw new ApiError(404,"Video not Found");
-    }
+  if (!video) {
+    throw new ApiError(404, "Video not Found");
+  }
 
-    // Ensures only creator can see drafts.
-    if(!video.isPublished && (!req.user || video.owner.toString() !== req.user._id.toString())){
-      throw new ApiError(403,"You are not allowed to view this video")
-    }
+  // Ensures only creator can see drafts.
+  if (
+    !video.isPublished &&
+    (!req.user || video.owner.toString() !== req.user._id.toString())
+  ) {
+    throw new ApiError(403, "You are not allowed to view this video");
+  }
 
-    return res
+  const isOwner =
+    req.user && video.owner.toString() === req.user._id.toString();
+
+  if (video.isPublished && isOwner) {
+    video.views += 1;
+    await video.save();
+  }
+
+  return res
     .status(200)
-    .json(new ApiResponse(200,video,"Video fetched successfully"))
-
-
-})
+    .json(new ApiResponse(200, video, "Video fetched successfully"));
+});
 
 export {
   getAllVideos,
@@ -282,5 +291,5 @@ export {
   togglePublishStatus,
   deleteVideo,
   updateVideo,
-  getVideoById
+  getVideoById,
 };
